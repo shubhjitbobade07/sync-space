@@ -6,7 +6,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true }, // will store the HASH, never plaintext
   role: {
     type: String,
-    enum: ['owner', 'admin', 'member'],
+    enum: ['owner', 'admin', 'member','user'],
     default: 'member'
   }
 }, { timestamps: true });

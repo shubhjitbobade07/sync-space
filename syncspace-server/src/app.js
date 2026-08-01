@@ -1,37 +1,70 @@
-require('dotenv').config();
-const express = require('express');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const connectDB = require('./config/db');
-const authRoutes = require('./routes/authRoutes');
-const channelRoutes = require('./routes/channelRoutes');
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const http = require("http");
+const { Server } = require("socket.io");
+
+const connectDB = require("./config/db");
+const sessionMiddleware = require("./middleware/session");
+
+const authRoutes = require("./routes/authRoutes");
+const channelRoutes = require("./routes/channelRoutes");
+const registerChatHandlers = require("./sockets/chatSocket");
 
 const app = express();
-// Connect to MongoDB
+
+// Connect DB
 connectDB();
 
 // Middleware
-app.use(express.json());
-
-app.use(session({
-  secret: process.env.SESSION_SECRET,   // signs the session ID cookie
-  resave: false,                        // don't re-save session if nothing changed
-  saveUninitialized: false,             // don't create a session until something is stored in it
-  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
-  cookie: {
-    httpOnly: true,                     // JS on the client can't read this cookie (blocks XSS token theft)
-    secure: false,                      // set true in production (HTTPS only)
-    sameSite: 'lax',                    // CSRF mitigation — cookie not sent on most cross-site requests
-    maxAge: 1000 * 60 * 60 * 24         // 1 day
-  }
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true
 }));
+app.use(express.json());
+app.use(sessionMiddleware);
 
-app.use('/api/auth', authRoutes);
-app.use('/api/channels', channelRoutes);
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/channels", channelRoutes);
 
-app.get('/', (req, res) => {
-  res.send('SyncSpace API is alive');
+app.get("/", (req, res) => {
+  res.send("SyncSpace API is alive");
 });
 
+// HTTP Server
+const server = http.createServer(app);
+
+// Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173",
+    credentials: true,
+  },
+});
+
+// Share Express session with Socket.IO
+const wrap = (middleware) => (socket, next) =>
+  middleware(socket.request, {}, next);
+
+io.use(wrap(sessionMiddleware));
+
+// Protect socket connections
+io.use((socket, next) => {
+  if (socket.request.session?.userId) {
+    return next();
+  }
+
+  next(new Error("Unauthorized"));
+});
+
+// Register socket handlers
+registerChatHandlers(io);
+
+// Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

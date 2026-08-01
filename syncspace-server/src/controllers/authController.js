@@ -10,7 +10,10 @@ exports.register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10); // 10 = salt rounds
 
-    const user = await User.create({ name, email, password: hashedPassword, role:role });
+    const user = await User.create({ name, email, password: hashedPassword, role });
+
+    req.session.userId = user._id;
+    req.session.role = user.role;
 
     res.status(201).json({ id: user._id, name: user.name, email: user.email, role: user.role });
   } catch (err) {
@@ -47,7 +50,13 @@ exports.logout = (req, res) => {
   });
 };
 
-exports.me = (req, res) => {
+exports.me = async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ message: 'Not authenticated' });
-  res.json({ userId: req.session.userId, role: req.session.role });
+  try {
+    const user = await User.findById(req.session.userId).select('-password');
+    if (!user) return res.status(401).json({ message: 'User not found' });
+    res.json({ id: user._id, userId: user._id, name: user.name, email: user.email, role: user.role });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
 };
