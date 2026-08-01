@@ -1,4 +1,5 @@
 const Channel = require('../models/Channel');
+const Message = require('../models/Message');
 
 exports.createChannel = async (req, res) => {
   try {
@@ -29,8 +30,10 @@ exports.deleteChannel = async (req, res) => {
       return res.status(403).json({ message: 'Not allowed to delete this channel' });
     }
 
+    // Delete all messages in this channel
+    await Message.deleteMany({ channel: req.params.id });
     await channel.deleteOne();
-    res.json({ message: 'Channel deleted' });
+    res.json({ message: 'Channel deleted successfully', channelId: req.params.id });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

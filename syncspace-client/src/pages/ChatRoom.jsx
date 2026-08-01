@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
@@ -11,11 +11,14 @@ import {
   Paperclip, 
   Users, 
   Circle,
-  AlertCircle 
+  AlertCircle,
+  Trash2,
+  X
 } from 'lucide-react';
 
 export default function ChatRoom() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   
   const [channel, setChannel] = useState(null);
@@ -24,6 +27,10 @@ export default function ChatRoom() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
   
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -89,6 +96,30 @@ export default function ChatRoom() {
     setText('');
   };
 
+  const handleDeleteChannel = async () => {
+    if (!channel) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.delete(`/channels/${id}`);
+      navigate('/channels');
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Failed to delete channel.');
+      setDeleting(false);
+    }
+  };
+
+  const canDeleteChannel = () => {
+    if (!user || !channel) return false;
+    if (user.role === 'owner') return true;
+    if (user.role === 'admin') {
+      const creatorId = typeof channel.createdBy === 'object' ? channel.createdBy?._id : channel.createdBy;
+      const currentUserId = user.id || user.userId;
+      return creatorId?.toString() === currentUserId?.toString();
+    }
+    return false;
+  };
+
   const getInitials = (name) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
@@ -143,22 +174,58 @@ export default function ChatRoom() {
             </div>
           </div>
 
-          {channel?.members && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-              color: 'var(--text-secondary)',
-              background: 'rgba(255, 255, 255, 0.05)',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              border: '1px solid var(--border-color)',
-            }}>
-              <Users size={14} color="var(--text-muted)" />
-              <span>{channel.members.length} member{channel.members.length > 1 ? 's' : ''}</span>
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {channel?.members && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+              }}>
+                <Users size={14} color="var(--text-muted)" />
+                <span>{channel.members.length} member{channel.members.length > 1 ? 's' : ''}</span>
+              </div>
+            )}
+
+            {canDeleteChannel() && (
+              <button
+                onClick={() => {
+                  setShowDeleteModal(true);
+                  setDeleteError('');
+                }}
+                title="Delete Channel"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  color: '#f87171',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Delete Channel</span>
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Error Alert */}
@@ -339,6 +406,94 @@ export default function ChatRoom() {
           </form>
         </div>
       </main>
+
+      {/* Header Delete Channel Confirmation Modal */}
+      {showDeleteModal && channel && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px',
+        }}>
+          <div className="glass-container animate-fade-in" style={{
+            width: '100%',
+            maxWidth: '420px',
+            padding: '24px',
+            background: 'var(--bg-sidebar)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trash2 size={20} color="#f87171" />
+                <h3 style={{ fontSize: '18px' }}>Delete Channel</h3>
+              </div>
+              <button onClick={() => setShowDeleteModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>#{channel.name}</strong>? This action will permanently remove all messages in this channel and cannot be undone.
+            </p>
+
+            {deleteError && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                marginBottom: '16px',
+              }}>
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                style={{
+                  padding: '10px 16px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-secondary)',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteChannel}
+                disabled={deleting}
+                style={{
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: '#ffffff',
+                  fontWeight: '500',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Channel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

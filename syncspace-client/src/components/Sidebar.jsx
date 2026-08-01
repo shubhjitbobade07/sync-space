@@ -11,7 +11,8 @@ import {
   ShieldCheck, 
   X, 
   FolderPlus,
-  Lock
+  Lock,
+  Trash2
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -21,6 +22,10 @@ export default function Sidebar() {
   const [newChannelName, setNewChannelName] = useState('');
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
+
+  const [channelToDelete, setChannelToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -58,6 +63,25 @@ export default function Sidebar() {
     }
   };
 
+  const handleDeleteChannel = async () => {
+    if (!channelToDelete) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.delete(`/channels/${channelToDelete._id}`);
+      const deletedId = channelToDelete._id;
+      setChannelToDelete(null);
+      setChannels(prev => prev.filter(c => c._id !== deletedId));
+      if (activeChannelId === deletedId) {
+        navigate('/channels');
+      }
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Failed to delete channel.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredChannels = channels.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -68,6 +92,17 @@ export default function Sidebar() {
   };
 
   const canCreateChannel = user?.role === 'admin' || user?.role === 'owner';
+
+  const canDeleteChannel = (c) => {
+    if (!user || !c) return false;
+    if (user.role === 'owner') return true;
+    if (user.role === 'admin') {
+      const creatorId = typeof c.createdBy === 'object' ? c.createdBy?._id : c.createdBy;
+      const currentUserId = user.id || user.userId;
+      return creatorId?.toString() === currentUserId?.toString();
+    }
+    return false;
+  };
 
   return (
     <aside style={{
@@ -168,6 +203,7 @@ export default function Sidebar() {
         ) : (
           filteredChannels.map(c => {
             const isActive = c._id === activeChannelId;
+            const isDeletable = canDeleteChannel(c);
             return (
               <div
                 key={c._id}
@@ -191,6 +227,32 @@ export default function Sidebar() {
                 <span style={{ fontSize: '14px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {c.name}
                 </span>
+
+                {isDeletable && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setChannelToDelete(c);
+                      setDeleteError('');
+                    }}
+                    title="Delete Channel"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'color 0.15s ease',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </div>
             );
           })
@@ -367,6 +429,94 @@ export default function Sidebar() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Channel Confirmation Modal Overlay */}
+      {channelToDelete && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px',
+        }}>
+          <div className="glass-container animate-fade-in" style={{
+            width: '100%',
+            maxWidth: '420px',
+            padding: '24px',
+            background: 'var(--bg-sidebar)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trash2 size={20} color="#f87171" />
+                <h3 style={{ fontSize: '18px' }}>Delete Channel</h3>
+              </div>
+              <button onClick={() => setChannelToDelete(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>#{channelToDelete.name}</strong>? This action will permanently remove all messages in this channel and cannot be undone.
+            </p>
+
+            {deleteError && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                marginBottom: '16px',
+              }}>
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setChannelToDelete(null)}
+                disabled={deleting}
+                style={{
+                  padding: '10px 16px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-secondary)',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteChannel}
+                disabled={deleting}
+                style={{
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: '#ffffff',
+                  fontWeight: '500',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Channel'}
+              </button>
+            </div>
           </div>
         </div>
       )}
