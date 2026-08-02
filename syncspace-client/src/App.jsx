@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ChannelProvider } from './context/ChannelContext';
 import AuthPage from './pages/AuthPage';
 import ChannelsPage from './pages/ChannelsPage';
 import ChatRoom from './pages/ChatRoom';
@@ -44,13 +45,15 @@ function ProtectedRoute({ children }) {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AuthPage />} />
-          <Route path="/channels" element={<ProtectedRoute><ChannelsPage /></ProtectedRoute>} />
-          <Route path="/channels/:id" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
-        </Routes>
-      </BrowserRouter>
+      <ChannelProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<AuthPage />} />
+            <Route path="/channels" element={<ProtectedRoute><ChannelsPage /></ProtectedRoute>} />
+            <Route path="/channels/:id" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
+          </Routes>
+        </BrowserRouter>
+      </ChannelProvider>
     </AuthProvider>
   );
 }

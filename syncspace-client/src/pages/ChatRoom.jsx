@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
+import { useChannels } from '../context/ChannelContext';
 import Sidebar from '../components/Sidebar';
 import api from '../api/axios';
 import { 
@@ -19,7 +20,8 @@ import {
 export default function ChatRoom() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
+  const { channels, channelsLoaded, loadChannels, removeChannel } = useChannels();
   
   const [channel, setChannel] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -43,56 +45,50 @@ export default function ChatRoom() {
     scrollToBottom();
   }, [messages]);
 
-  // Load channel details
+  // Reset state immediately when navigating to a different channel
+  // so we never show stale channel name or old messages during the transition
   useEffect(() => {
-    api.get('/channels')
-      .then(res => {
-        const found = res.data.find(c => c._id === id);
-        if (found) setChannel(found);
-      })
-      .catch(() => {});
+    setChannel(null);
+    setMessages([]);
+    setText('');
   }, [id]);
+
+  // Resolve channel from shared context — no extra API call needed
+  useEffect(() => {
+    if (!channelsLoaded) {
+      loadChannels();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (channels.length > 0) {
+      // Always update channel (including null if not found) when id or channels change
+      const found = channels.find(c => c._id === id) || null;
+      setChannel(found);
+    }
+  }, [channels, id]);
 
   // Socket connection
   useEffect(() => {
-    setMessages([]);
-    setError('');
+    if (!accessToken) return; // wait until AuthContext has actually loaded a token
 
-    const socket = io('http://localhost:5000', { withCredentials: true });
+    const socket = io('http://localhost:5000', {
+      auth: { token: accessToken } // <-- this replaces withCredentials
+    });
     socketRef.current = socket;
 
-    socket.on('connect', () => {
-      setConnected(true);
-      socket.emit('joinChannel', id);
-    });
+    socket.on('connect', () => { setConnected(true); socket.emit('joinChannel', id); });
+    socket.on('disconnect', () => setConnected(false));
+    socket.on('newMessage', (msg) => setMessages((prev) => [...prev, msg]));
+    socket.on('errorMessage', (msg) => console.error(msg));
+    socket.on('connect_error', (err) => console.error('Socket auth failed:', err.message));
 
-    socket.on('joinedChannel', () => {
-      console.log(`Joined channel ${id}`);
-    });
-
-    socket.on('newMessage', (msg) => {
-      setMessages(prev => [...prev, msg]);
-    });
-
-    socket.on('errorMessage', (msg) => {
-      setError(msg);
-    });
-
-    socket.on('disconnect', () => {
-      setConnected(false);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [id]);
+    return () => socket.disconnect();
+  }, [id, accessToken]); // re-run if the token changes too
 
   const sendMessage = (e) => {
     e.preventDefault();
-    if (!text.trim()) return;
-    if (!socketRef.current) return;
-
-    socketRef.current.emit('sendMessage', { channelId: id, text: text.trim() });
+    socketRef.current.emit('sendMessage', { channelId: id, text });
     setText('');
   };
 
@@ -102,6 +98,7 @@ export default function ChatRoom() {
     setDeleteError('');
     try {
       await api.delete(`/channels/${id}`);
+      removeChannel(id); // instantly remove from shared context so sidebar updates
       navigate('/channels');
     } catch (err) {
       setDeleteError(err.response?.data?.message || 'Failed to delete channel.');

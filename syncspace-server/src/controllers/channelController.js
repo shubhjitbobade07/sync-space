@@ -6,8 +6,8 @@ exports.createChannel = async (req, res) => {
     const { name } = req.body;
     const channel = await Channel.create({
       name,
-      createdBy: req.session.userId,
-      members: [req.session.userId]
+      createdBy: req.user.userId,
+      members: [req.user.userId]
     });
     res.status(201).json(channel);
   } catch (err) {
@@ -23,8 +23,8 @@ exports.deleteChannel = async (req, res) => {
     // Resource-level check: even an "admin" shouldn't delete channels
     // that aren't theirs unless they're an owner. This is the part
     // basic role-checking middleware CAN'T do alone.
-    const isCreator = channel.createdBy.toString() === req.session.userId;
-    const isOwner = req.session.role === 'owner';
+    const isCreator = channel.createdBy.toString() === req.user.userId;
+    const isOwner = req.user.role === 'owner';
 
     if (!isCreator && !isOwner) {
       return res.status(403).json({ message: 'Not allowed to delete this channel' });
@@ -40,6 +40,6 @@ exports.deleteChannel = async (req, res) => {
 };
 
 exports.listChannels = async (req, res) => {
-  const channels = await Channel.find({ members: req.session.userId });
+  const channels = await Channel.find({ members: req.user.userId });
   res.json(channels);
-};
+};

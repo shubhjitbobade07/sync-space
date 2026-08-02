@@ -3,7 +3,7 @@ const Channel = require('../models/Channel');
 
 module.exports = (io) => {
   io.on('connection', (socket) => {
-    const userId = socket.request.session.userId;
+    const userId = socket.user.userId;
     console.log(`User ${userId} connected via socket ${socket.id}`);
 
     // Client asks to join a specific channel's "room"
