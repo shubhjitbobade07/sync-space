@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useChannels } from '../context/ChannelContext';
 import api from '../api/axios';
 import { 
   MessageSquare, 
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const [channels, setChannels] = useState([]);
+  const { channels, setChannels, channelsLoaded, loadChannels, removeChannel, clearChannels } = useChannels();
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
@@ -31,17 +32,11 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { id: activeChannelId } = useParams();
 
-  const loadChannels = async () => {
-    try {
-      const res = await api.get('/channels');
-      setChannels(res.data);
-    } catch (err) {
-      console.error('Failed to load channels', err);
-    }
-  };
-
+  // Only fetch channels on the very first mount (when context hasn't loaded yet)
   useEffect(() => {
-    loadChannels();
+    if (!channelsLoaded) {
+      loadChannels();
+    }
   }, []);
 
   const handleCreateChannel = async (e) => {
@@ -54,7 +49,8 @@ export default function Sidebar() {
       const res = await api.post('/channels', { name: newChannelName.trim() });
       setNewChannelName('');
       setShowCreateModal(false);
-      await loadChannels();
+      // Add new channel to shared state directly — no refetch needed
+      setChannels(prev => [...prev, res.data]);
       navigate(`/channels/${res.data._id}`);
     } catch (err) {
       setCreateError(err.response?.data?.message || 'Could not create channel. Require Admin or Owner role.');
@@ -71,7 +67,7 @@ export default function Sidebar() {
       await api.delete(`/channels/${channelToDelete._id}`);
       const deletedId = channelToDelete._id;
       setChannelToDelete(null);
-      setChannels(prev => prev.filter(c => c._id !== deletedId));
+      removeChannel(deletedId); // update shared context state
       if (activeChannelId === deletedId) {
         navigate('/channels');
       }
@@ -297,7 +293,7 @@ export default function Sidebar() {
         </div>
 
         <button
-          onClick={logout}
+          onClick={() => { clearChannels(); logout(); }}
           title="Sign Out"
           style={{
             background: 'transparent',

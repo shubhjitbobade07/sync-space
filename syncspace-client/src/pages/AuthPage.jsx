@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useChannels } from '../context/ChannelContext';
 import { useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, 
@@ -22,6 +23,7 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   
   const { login, register } = useAuth();
+  const { clearChannels } = useChannels();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -34,6 +36,9 @@ export default function AuthPage() {
       } else {
         await login(form.email, form.password);
       }
+      // Clear any channels cached from a previous user session
+      // so the new user gets a fresh fetch of their own channels
+      clearChannels();
       navigate('/channels');
     } catch (err) {
       setError(err.response?.data?.message || 'Authentication failed. Please try again.');

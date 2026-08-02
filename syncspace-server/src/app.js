@@ -6,24 +6,28 @@ const http = require("http");
 const { Server } = require("socket.io");
 
 const connectDB = require("./config/db");
-const sessionMiddleware = require("./middleware/session");
+
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 
 const authRoutes = require("./routes/authRoutes");
 const channelRoutes = require("./routes/channelRoutes");
 const registerChatHandlers = require("./sockets/chatSocket");
 
+
 const app = express();
 
-// Connect DB
-connectDB();
-
+app.use(express.json());
+app.use(cookieParser());   // still needed — refresh token lives in a cookie
 // Middleware
 app.use(cors({
   origin: "http://localhost:5173",
   credentials: true
 }));
-app.use(express.json());
-app.use(sessionMiddleware);
+
+// Connect DB
+connectDB();
+// NOTE: sessionMiddleware is gone — no more req.session anywhere
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -44,20 +48,24 @@ const io = new Server(server, {
   },
 });
 
-// Share Express session with Socket.IO
-const wrap = (middleware) => (socket, next) =>
-  middleware(socket.request, {}, next);
-
-io.use(wrap(sessionMiddleware));
+// Socket auth is now MUCH simpler than the session-sharing trick from Phase 4 —
+// the client sends the access token directly at connect time.
 
 // Protect socket connections
 io.use((socket, next) => {
-  if (socket.request.session?.userId) {
-    return next();
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error("Authentication error: No token provided"));
   }
-
-  next(new Error("Unauthorized"));
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+    if (err) {
+      return next(new Error("Authentication error: Invalid token"));
+    }
+    socket.user = decoded; // Attach user info to socket object
+    next();
+  });
 });
+
 
 // Register socket handlers
 registerChatHandlers(io);

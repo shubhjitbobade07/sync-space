@@ -1,7 +1,22 @@
 const bcrypt = require('bcrypt');
 const User = require('../models/user');
 
-exports.register = async (req, res) => {
+const jwt = require("jsonwebtoken");
+const { generateAccessToken, generateRefreshToken } = require('../utils/GenerateTokens');
+
+
+const sendRefreshCookie = (res,token) => {
+  res.cookie('refreshToken', token,{
+    httpOnly: true,
+    secure:false,      // true in production (HTTPS)
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  })
+}
+
+ 
+
+const register = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
@@ -12,16 +27,20 @@ exports.register = async (req, res) => {
 
     const user = await User.create({ name, email, password: hashedPassword, role });
 
-    req.session.userId = user._id;
-    req.session.role = user.role;
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    sendRefreshCookie(res,refreshToken);
 
-    res.status(201).json({ id: user._id, name: user.name, email: user.email, role: user.role });
+    res.status(201).json({
+       accessToken,
+       user: { id: user._id, name: user.name, email: user.email, role: user.role } 
+      });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
-exports.login = async (req, res) => {
+const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -31,32 +50,54 @@ exports.login = async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: 'Invalid credentials' });
 
-    // This is the key line — Express writes a session record and
-    // sends back a Set-Cookie header with the session ID
-    req.session.userId = user._id;
-    req.session.role = user.role;
+   
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    sendRefreshCookie(res,refreshToken);
 
-    res.json({ id: user._id, name: user.name, email: user.email, role: user.role });
+    res.json({
+       accessToken,
+       user: { id: user._id, name: user.name, email: user.email, role: user.role }
+       });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
-exports.logout = (req, res) => {
-  req.session.destroy((err) => {
-    if (err) return res.status(500).json({ message: 'Could not log out' });
-    res.clearCookie('connect.sid');
+// NEW — this replaces what sessions gave you for free
+const refresh = (req,res) =>{
+  const token = req.cookies.refreshToken;
+  if(!token) return res.status(401).json({message:"No refresh token provided"});
+
+  jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+    if(err) return res.status(403).json({message:"Invalid refresh token"});
+
+    // Note: role isn't in the refresh token payload, so a real app would
+    // re-fetch the user here to get their current role before issuing
+    // a new access token — cheap and avoids serving a stale role.
+    User.findById(decoded.userId).then(user => {
+      if(!user) return res.status(404).json({message:"User not found"});
+      const newAccessToken = generateAccessToken(user);
+      res.json({accessToken:newAccessToken});
+    });
+})
+}
+
+const logout = (req, res) => {
+    res.clearCookie('refreshToken');
     res.json({ message: 'Logged out' });
-  });
 };
 
-exports.me = async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ message: 'Not authenticated' });
-  try {
-    const user = await User.findById(req.session.userId).select('-password');
-    if (!user) return res.status(401).json({ message: 'User not found' });
-    res.json({ id: user._id, userId: user._id, name: user.name, email: user.email, role: user.role });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
+const me = async (req, res) => {
+    // req.user is set by the requireAuth middleware after verifying the access token
+  res.json(req.user);
 };
+
+
+module.exports = {
+  register,
+  login,
+  logout,
+  me,
+  refresh
+}

@@ -2,7 +2,7 @@
 
 exports.requireRole = (...allowedRoles) => {
     return (req, res, next) => {
-        const userRole = req.session.role; // Assuming the user's role is stored in the session
+        const userRole = req.user.role; // set by requireAuth JWT middleware
         if(!userRole){
             return  res.status(401).json({ message: 'Unauthorized' });
         }
