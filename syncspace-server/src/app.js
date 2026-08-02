@@ -10,6 +10,8 @@ const connectDB = require("./config/db");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 
+const passport = require('./config/passport');
+
 const authRoutes = require("./routes/authRoutes");
 const channelRoutes = require("./routes/channelRoutes");
 const registerChatHandlers = require("./sockets/chatSocket");
@@ -19,6 +21,7 @@ const app = express();
 
 app.use(express.json());
 app.use(cookieParser());   // still needed — refresh token lives in a cookie
+app.use(passport.initialize());
 // Middleware
 app.use(cors({
   origin: "http://localhost:5173",

@@ -40,6 +40,16 @@ export function AuthProvider({ children }) {
     setUser(res.data.user);
   };
 
+  // Called by the /oauth-success landing page after a Google OAuth redirect.
+  // The token arrives via URL query param; refresh cookie was already set by
+  // the server redirect, so silent refresh will work on future page loads too.
+  const loginWithToken = async (token) => {
+    setAccessToken(token);
+    setToken(token);
+    const res = await api.get('/auth/me');
+    setUser(res.data);
+  };
+
   const logout = async () => {
     await api.post('/auth/logout');
     setAccessToken(null);
@@ -48,10 +58,10 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, accessToken, loading, login, register, loginWithToken, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext);
