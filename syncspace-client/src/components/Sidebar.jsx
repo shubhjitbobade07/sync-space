@@ -315,6 +315,42 @@ export default function Sidebar() {
         )}
       </div>
 
+      {/* Admin Panel Quick Access */}
+      {(user?.role === 'owner' || user?.role === 'admin') && (
+        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-color)' }}>
+          <button
+            onClick={() => navigate('/admin')}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              background: 'rgba(16, 185, 129, 0.06)',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              color: '#6ee7b7',
+              fontSize: '13px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(16,185,129,0.12)';
+              e.currentTarget.style.borderColor = 'rgba(16,185,129,0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(16, 185, 129, 0.06)';
+              e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+            }}
+          >
+            <ShieldCheck size={16} color="#10b981" />
+            <span>Admin Panel</span>
+          </button>
+        </div>
+      )}
+
       {/* User Profile Footer */}
       <div style={{
         padding: '16px',

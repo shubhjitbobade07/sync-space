@@ -5,6 +5,7 @@ import AuthPage from './pages/AuthPage';
 import ChannelsPage from './pages/ChannelsPage';
 import ChatRoom from './pages/ChatRoom';
 import OAuthSuccess from './pages/OAuthSuccess';
+import AdminPage from './pages/AdminPage';
 import { MessageSquare } from 'lucide-react';
 
 function ProtectedRoute({ children }) {
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="/oauth-success" element={<OAuthSuccess />} />
             <Route path="/channels" element={<ProtectedRoute><ChannelsPage /></ProtectedRoute>} />
             <Route path="/channels/:id" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
       </ChannelProvider>
