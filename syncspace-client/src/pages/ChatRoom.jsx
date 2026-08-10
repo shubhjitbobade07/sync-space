@@ -14,7 +14,8 @@ import {
   Circle,
   AlertCircle,
   Trash2,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 
 export default function ChatRoom() {
@@ -32,6 +33,12 @@ export default function ChatRoom() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [managingRequestId, setManagingRequestId] = useState(null);
+  const [leaving, setLeaving] = useState(false);
 
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -67,6 +74,58 @@ export default function ChatRoom() {
       setChannel(found);
     }
   }, [channels, id]);
+
+  const fetchRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await api.get(`/channels/${id}/requests`);
+      setRequests(res.data);
+    } catch (err) {
+      console.error('Failed to fetch requests', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showRequestsModal && id) {
+      fetchRequests();
+    }
+  }, [showRequestsModal, id]);
+
+  const handleAcceptRequest = async (userId) => {
+    setManagingRequestId(userId);
+    try {
+      await api.post(`/channels/${id}/requests/${userId}/accept`);
+      setRequests(prev => prev.filter(r => r._id !== userId));
+      loadChannels();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to accept request');
+    } finally {
+      setManagingRequestId(null);
+    }
+  };
+
+  const handleRejectRequest = async (userId) => {
+    setManagingRequestId(userId);
+    try {
+      await api.post(`/channels/${id}/requests/${userId}/reject`);
+      setRequests(prev => prev.filter(r => r._id !== userId));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reject request');
+    } finally {
+      setManagingRequestId(null);
+    }
+  };
+
+  const canManageRequests = () => {
+    if (!user || !channel) return false;
+    const creatorId = typeof channel.createdBy === 'object' ? channel.createdBy?._id : channel.createdBy;
+    const currentUserId = user.id || user.userId;
+    const isCreator = creatorId?.toString() === currentUserId?.toString();
+    const isOwnerOrAdmin = user.role === 'owner' || user.role === 'admin';
+    return isCreator || isOwnerOrAdmin;
+  };
 
   // Socket connection
   useEffect(() => {
@@ -115,6 +174,28 @@ export default function ChatRoom() {
       return creatorId?.toString() === currentUserId?.toString();
     }
     return false;
+  };
+
+  const canLeaveChannel = () => {
+    if (!user || !channel) return false;
+    const creatorId = typeof channel.createdBy === 'object' ? channel.createdBy?._id : channel.createdBy;
+    const currentUserId = user.id || user.userId;
+    return creatorId?.toString() !== currentUserId?.toString();
+  };
+
+  const handleLeaveChannel = async () => {
+    if (!channel) return;
+    if (!window.confirm(`Are you sure you want to leave #${channel.name}?`)) return;
+    setLeaving(true);
+    try {
+      await api.post(`/channels/${id}/leave`);
+      removeChannel(id);
+      navigate('/channels');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to leave channel.');
+    } finally {
+      setLeaving(false);
+    }
   };
 
   const getInitials = (name) => {
@@ -189,6 +270,51 @@ export default function ChatRoom() {
               </div>
             )}
 
+            {canManageRequests() && (
+              <button
+                onClick={() => setShowRequestsModal(true)}
+                title="Manage Requests"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  color: 'var(--accent-light)',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)';
+                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.25)';
+                }}
+              >
+                <Users size={14} />
+                <span>Join Requests</span>
+                {channel?.requests && channel.requests.length > 0 && (
+                  <span style={{
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    borderRadius: '50%',
+                    fontSize: '10px',
+                    padding: '1px 5px',
+                    marginLeft: '4px',
+                    fontWeight: 'bold'
+                  }}>
+                    {channel.requests.length}
+                  </span>
+                )}
+              </button>
+            )}
+
             {canDeleteChannel() && (
               <button
                 onClick={() => {
@@ -220,6 +346,40 @@ export default function ChatRoom() {
               >
                 <Trash2 size={14} />
                 <span>Delete Channel</span>
+              </button>
+            )}
+
+            {canLeaveChannel() && (
+              <button
+                onClick={handleLeaveChannel}
+                disabled={leaving}
+                title="Leave Channel"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  color: '#f87171',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  opacity: leaving ? 0.6 : 1,
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                }}
+              >
+                <LogOut size={14} />
+                <span>Leave Channel</span>
               </button>
             )}
           </div>
@@ -278,7 +438,8 @@ export default function ChatRoom() {
             </div>
           ) : (
             messages.map((m, i) => {
-              const isSelf = m.sender?._id === user?.id || m.sender === user?.id;
+              const currentUserId = user?.id || user?.userId;
+              const isSelf = m.sender?._id === currentUserId || m.sender === currentUserId;
               const senderName = m.sender?.name || 'User';
 
               return (
@@ -487,6 +648,103 @@ export default function ChatRoom() {
               >
                 {deleting ? 'Deleting...' : 'Delete Channel'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Join Requests Modal Overlay */}
+      {showRequestsModal && channel && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px',
+        }}>
+          <div className="glass-container animate-fade-in" style={{
+            width: '100%',
+            maxWidth: '480px',
+            padding: '24px',
+            background: 'var(--bg-sidebar)',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} color="var(--accent-light)" />
+                <h3 style={{ fontSize: '18px', fontWeight: '700' }}>Pending Join Requests</h3>
+              </div>
+              <button onClick={() => setShowRequestsModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: '200px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {loadingRequests ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>Loading requests...</div>
+              ) : requests.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>No pending join requests for this channel.</div>
+              ) : (
+                requests.map(r => (
+                  <div
+                    key={r._id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{r.name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{r.email}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => handleRejectRequest(r._id)}
+                        disabled={managingRequestId === r._id}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          borderRadius: '6px',
+                          background: 'transparent',
+                          color: '#f87171',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        onClick={() => handleAcceptRequest(r._id)}
+                        disabled={managingRequestId === r._id}
+                        className="glow-button"
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Accept
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

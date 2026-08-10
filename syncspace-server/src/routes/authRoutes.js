@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('passport');
-const { register, login, logout, me, refresh } = require('../controllers/authController');
+const { register, login, logout, me, refresh, listUsers, updateUserRole, deleteUser } = require('../controllers/authController');
 const { requireAuth } = require('../middleware/authMiddleware');
 const { generateAccessToken, generateRefreshToken } = require('../utils/GenerateTokens');
 
@@ -15,6 +15,11 @@ router.post('/refresh', refresh);
 // Protected
 router.post('/logout', requireAuth, logout);
 router.get('/me', requireAuth, me);
+
+// User management
+router.get('/users', requireAuth, listUsers);
+router.patch('/users/:id/role', requireAuth, updateUserRole);
+router.delete('/users/:id', requireAuth, deleteUser);
 
 // ─── Google OAuth2 routes ──────────────────────────────────────────────────
 

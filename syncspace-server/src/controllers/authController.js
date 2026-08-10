@@ -93,11 +93,76 @@ const me = async (req, res) => {
   res.json(req.user);
 };
 
+const listUsers = async (req, res) => {
+  try {
+    const isOwnerOrAdmin = req.user.role === 'owner' || req.user.role === 'admin';
+    if (!isOwnerOrAdmin) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const users = await User.find({}, 'name email role createdAt');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+const updateUserRole = async (req, res) => {
+  try {
+    const isOwnerOrAdmin = req.user.role === 'owner' || req.user.role === 'admin';
+    if (!isOwnerOrAdmin) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { role } = req.body;
+    if (!['member', 'admin', 'owner'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role value' });
+    }
+
+    const userToUpdate = await User.findById(req.params.id);
+    if (!userToUpdate) return res.status(404).json({ message: 'User not found' });
+
+    if (userToUpdate.role === 'owner' && req.user.role !== 'owner') {
+      return res.status(403).json({ message: 'Only owners can modify owner roles' });
+    }
+
+    userToUpdate.role = role;
+    await userToUpdate.save();
+
+    res.json({ message: 'User role updated successfully', user: { id: userToUpdate._id, name: userToUpdate.name, email: userToUpdate.email, role: userToUpdate.role } });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+const deleteUser = async (req, res) => {
+  try {
+    const isOwnerOrAdmin = req.user.role === 'owner' || req.user.role === 'admin';
+    if (!isOwnerOrAdmin) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const userToDelete = await User.findById(req.params.id);
+    if (!userToDelete) return res.status(404).json({ message: 'User not found' });
+
+    if (userToDelete.role === 'owner' && req.user.role !== 'owner') {
+      return res.status(403).json({ message: 'Only owners can delete other owners' });
+    }
+
+    await userToDelete.deleteOne();
+    res.json({ message: 'User deleted successfully', userId: req.params.id });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 
 module.exports = {
   register,
   login,
   logout,
   me,
-  refresh
+  refresh,
+  listUsers,
+  updateUserRole,
+  deleteUser
 }
