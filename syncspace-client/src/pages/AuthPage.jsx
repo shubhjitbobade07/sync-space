@@ -355,9 +355,7 @@ export default function AuthPage() {
                       fontSize: '14px',
                     }}
                   >
-                    <option value="user">User (End Access)</option>
                     <option value="member">Member (Standard Access)</option>
-                    <option value="admin">Admin (Channel Manager)</option>
                     <option value="owner">Owner (Full Control)</option>
                   </select>
                 </div>

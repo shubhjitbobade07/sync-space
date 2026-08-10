@@ -13,7 +13,8 @@ import {
   X, 
   FolderPlus,
   Lock,
-  Trash2
+  Trash2,
+  Compass
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -27,6 +28,44 @@ export default function Sidebar() {
   const [channelToDelete, setChannelToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  const [showDiscoverModal, setShowDiscoverModal] = useState(false);
+  const [discoverChannels, setDiscoverChannels] = useState([]);
+  const [discoverSearch, setDiscoverSearch] = useState('');
+  const [loadingDiscover, setLoadingDiscover] = useState(false);
+  const [requestingChannelId, setRequestingChannelId] = useState(null);
+
+  const fetchDiscoverChannels = async () => {
+    setLoadingDiscover(true);
+    try {
+      const res = await api.get('/channels/discover');
+      setDiscoverChannels(res.data);
+    } catch (err) {
+      console.error('Failed to fetch discoverable channels', err);
+    } finally {
+      setLoadingDiscover(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showDiscoverModal) {
+      fetchDiscoverChannels();
+    }
+  }, [showDiscoverModal]);
+
+  const handleRequestJoin = async (channelId) => {
+    setRequestingChannelId(channelId);
+    try {
+      await api.post(`/channels/${channelId}/request`);
+      setDiscoverChannels(prev => prev.map(c => 
+        c._id === channelId ? { ...c, requested: true } : c
+      ));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to send request');
+    } finally {
+      setRequestingChannelId(null);
+    }
+  };
 
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -137,23 +176,44 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          title="Create Channel"
-          style={{
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-primary)',
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Plus size={18} />
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setShowDiscoverModal(true)}
+            title="Discover Channels"
+            style={{
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <Compass size={18} />
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            title="Create Channel"
+            style={{
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <Plus size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Channel Search Bar */}
@@ -512,6 +572,117 @@ export default function Sidebar() {
               >
                 {deleting ? 'Deleting...' : 'Delete Channel'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discover Channels Modal Overlay */}
+      {showDiscoverModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px',
+        }}>
+          <div className="glass-container animate-fade-in" style={{
+            width: '100%',
+            maxWidth: '520px',
+            padding: '24px',
+            background: 'var(--bg-sidebar)',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Compass size={20} color="var(--accent-light)" />
+                <h3 style={{ fontSize: '18px', fontWeight: '700' }}>Discover Channels</h3>
+              </div>
+              <button onClick={() => setShowDiscoverModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Discover Search Bar */}
+            <div style={{ position: 'relative', marginBottom: '16px', flexShrink: 0 }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search public channels..."
+                value={discoverSearch}
+                onChange={e => setDiscoverSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 38px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+
+            {/* Channels List */}
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: '200px', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
+              {loadingDiscover ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>Loading channels...</div>
+              ) : discoverChannels.filter(c => c.name.toLowerCase().includes(discoverSearch.toLowerCase())).length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>No new channels found to join.</div>
+              ) : (
+                discoverChannels
+                  .filter(c => c.name.toLowerCase().includes(discoverSearch.toLowerCase()))
+                  .map(c => (
+                    <div
+                      key={c._id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '600', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Hash size={14} color="var(--accent-light)" />
+                          {c.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          Created by: {c.createdBy?.name || 'Unknown'} • {c.membersCount} member{c.membersCount !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => !c.requested && handleRequestJoin(c._id)}
+                        disabled={c.requested || requestingChannelId === c._id}
+                        className={c.requested ? "" : "glow-button"}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          borderRadius: '6px',
+                          background: c.requested ? 'rgba(255,255,255,0.05)' : undefined,
+                          color: c.requested ? 'var(--text-muted)' : undefined,
+                          border: c.requested ? '1px solid var(--border-color)' : undefined,
+                          cursor: c.requested ? 'default' : 'pointer',
+                        }}
+                      >
+                        {requestingChannelId === c._id ? 'Sending...' : c.requested ? 'Requested' : 'Join'}
+                      </button>
+                    </div>
+                  ))
+              )}
             </div>
           </div>
         </div>
